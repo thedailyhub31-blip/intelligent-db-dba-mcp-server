@@ -1,6 +1,5 @@
-import { Database } from 'sql.js';
 import { logger } from '../utils/logger.js';
-import { queryAll, queryFirst } from './databaseEngine.js';
+import { type DbConnection, queryAll, runStatement } from './databaseEngine.js';
 
 export interface MigrationRisk {
   level: 'SAFE' | 'WARNING' | 'DANGEROUS' | 'CRITICAL';
@@ -99,7 +98,7 @@ export function assessMigrationRisk(migrationSql: string): MigrationRisk {
   return { level: highestLevel, issues, recommendations };
 }
 
-export function runDryMigration(db: Database, migrationSql: string): DryRunResult {
+export function runDryMigration(db: DbConnection, migrationSql: string): DryRunResult {
   logger.info('Starting dry-run migration', { sql: migrationSql.substring(0, 100) });
 
   const riskAssessment = assessMigrationRisk(migrationSql);
@@ -107,10 +106,10 @@ export function runDryMigration(db: Database, migrationSql: string): DryRunResul
 
   // Always use a savepoint so we can rollback completely
   try {
-    db.run('SAVEPOINT dry_run_migration');
+    runStatement(db, 'SAVEPOINT dry_run_migration');
 
     try {
-      db.run(migrationSql);
+      runStatement(db, migrationSql);
       const executionTimeMs = Date.now() - startTime;
 
       // Capture what changed before rollback
@@ -125,8 +124,8 @@ export function runDryMigration(db: Database, migrationSql: string): DryRunResul
       }
 
       // Always rollback — this is a DRY RUN
-      db.run('ROLLBACK TO SAVEPOINT dry_run_migration');
-      db.run('RELEASE SAVEPOINT dry_run_migration');
+      runStatement(db, 'ROLLBACK TO SAVEPOINT dry_run_migration');
+      runStatement(db, 'RELEASE SAVEPOINT dry_run_migration');
 
       logger.info('Dry-run migration completed and rolled back', { executionTimeMs });
 
@@ -140,8 +139,8 @@ export function runDryMigration(db: Database, migrationSql: string): DryRunResul
     } catch (execErr) {
       const executionTimeMs = Date.now() - startTime;
       try {
-        db.run('ROLLBACK TO SAVEPOINT dry_run_migration');
-        db.run('RELEASE SAVEPOINT dry_run_migration');
+        runStatement(db, 'ROLLBACK TO SAVEPOINT dry_run_migration');
+        runStatement(db, 'RELEASE SAVEPOINT dry_run_migration');
       } catch {
         // best effort
       }

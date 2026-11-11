@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { Database } from 'sql.js';
-import { getDatabase, analyzeQueryPlan, getTableSchema, queryFirst } from '../db/databaseEngine.js';
+import { getDatabase, analyzeQueryPlan, getTableSchema, queryFirst, runStatement } from '../db/databaseEngine.js';
 import { runDryMigration } from '../db/migrationGuardrail.js';
 import { logger } from '../utils/logger.js';
 
@@ -292,11 +291,11 @@ export async function handleSeedDemoDatabase(args: z.infer<typeof SeedDemoDataba
   logger.info('Tool: seed_demo_database', { rowCount });
 
   try {
-    db.run(`DROP TABLE IF EXISTS transactions`);
-    db.run(`DROP TABLE IF EXISTS orders`);
-    db.run(`DROP TABLE IF EXISTS users`);
+    runStatement(db, `DROP TABLE IF EXISTS transactions`);
+    runStatement(db, `DROP TABLE IF EXISTS orders`);
+    runStatement(db, `DROP TABLE IF EXISTS users`);
 
-    db.run(`CREATE TABLE users (
+    runStatement(db, `CREATE TABLE users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT NOT NULL,
       username TEXT NOT NULL,
@@ -306,7 +305,7 @@ export async function handleSeedDemoDatabase(args: z.infer<typeof SeedDemoDataba
       status TEXT NOT NULL DEFAULT 'active'
     )`);
 
-    db.run(`CREATE TABLE orders (
+    runStatement(db, `CREATE TABLE orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       product_name TEXT NOT NULL,
@@ -317,7 +316,7 @@ export async function handleSeedDemoDatabase(args: z.infer<typeof SeedDemoDataba
       FOREIGN KEY (user_id) REFERENCES users(id)
     )`);
 
-    db.run(`CREATE TABLE transactions (
+    runStatement(db, `CREATE TABLE transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_id INTEGER NOT NULL,
       payment_method TEXT NOT NULL,
@@ -331,9 +330,9 @@ export async function handleSeedDemoDatabase(args: z.infer<typeof SeedDemoDataba
     const countries = ['US', 'UK', 'DE', 'FR', 'JP', 'IN', 'CA', 'AU', 'BR', 'MX'];
     const statuses = ['active', 'inactive', 'suspended'];
 
-    db.run('BEGIN');
+    runStatement(db, 'BEGIN');
     for (let i = 0; i < rowCount; i++) {
-      db.run(
+      runStatement(db, 
         `INSERT INTO users (email, username, country, age, created_at, status) VALUES (?, ?, ?, ?, ?, ?)`,
         [
           `user${i}@example.com`,
@@ -345,15 +344,15 @@ export async function handleSeedDemoDatabase(args: z.infer<typeof SeedDemoDataba
         ]
       );
     }
-    db.run('COMMIT');
+    runStatement(db, 'COMMIT');
 
     const orderStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
     const products = ['Laptop', 'Phone', 'Tablet', 'Monitor', 'Keyboard', 'Mouse', 'Headphones', 'Webcam'];
 
-    db.run('BEGIN');
+    runStatement(db, 'BEGIN');
     for (let i = 0; i < rowCount * 3; i++) {
       const status = orderStatuses[i % orderStatuses.length];
-      db.run(
+      runStatement(db, 
         `INSERT INTO orders (user_id, product_name, amount, status, created_at, shipped_at) VALUES (?, ?, ?, ?, ?, ?)`,
         [
           (i % rowCount) + 1,
@@ -365,14 +364,14 @@ export async function handleSeedDemoDatabase(args: z.infer<typeof SeedDemoDataba
         ]
       );
     }
-    db.run('COMMIT');
+    runStatement(db, 'COMMIT');
 
     const paymentMethods = ['credit_card', 'paypal', 'bank_transfer', 'crypto'];
     const currencies = ['USD', 'EUR', 'GBP', 'JPY'];
 
-    db.run('BEGIN');
+    runStatement(db, 'BEGIN');
     for (let i = 0; i < rowCount * 2; i++) {
-      db.run(
+      runStatement(db, 
         `INSERT INTO transactions (order_id, payment_method, amount, currency, status, processed_at) VALUES (?, ?, ?, ?, ?, ?)`,
         [
           (i % (rowCount * 3)) + 1,
@@ -384,7 +383,7 @@ export async function handleSeedDemoDatabase(args: z.infer<typeof SeedDemoDataba
         ]
       );
     }
-    db.run('COMMIT');
+    runStatement(db, 'COMMIT');
 
     const userCountRow = queryFirst(db, 'SELECT COUNT(*) as c FROM users');
     const orderCountRow = queryFirst(db, 'SELECT COUNT(*) as c FROM orders');

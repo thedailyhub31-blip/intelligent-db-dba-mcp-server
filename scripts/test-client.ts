@@ -6,7 +6,7 @@ import path from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SERVER_PATH = path.resolve(__dirname, '../src/index.js');
+const SERVER_PATH = path.resolve(__dirname, '../dist/index.js');
 
 function log(msg: string) {
   process.stderr.write(`[TEST] ${msg}\n`);

@@ -48,7 +48,7 @@ sequenceDiagram
     MCP-->>Agent: Structured MCP tool response
 ```
 
-The SQLite engine is an in-memory `sql.js` database, so no database file is created. Every dry-run migration is executed inside a named savepoint and always rolled back.
+The SQLite engine is powered by `better-sqlite3`. By default it runs as an in-memory `:memory:` database, so no database file is created. Set the `SQLITE_DB_PATH` environment variable to open and inspect a real SQLite database file on disk. Every dry-run migration is executed inside a named savepoint and always rolled back.
 
 ---
 
@@ -338,14 +338,14 @@ Add the server to your Claude Desktop configuration:
     "intelligent-db-dba": {
       "command": "node",
       "args": [
-        "/absolute/path/to/intelligent-db-dba-mcp-server/dist/src/index.js"
+        "/absolute/path/to/intelligent-db-dba-mcp-server/dist/index.js"
       ]
     }
   }
 }
 ```
 
-On Windows, use an absolute path such as `C:\\Users\\<username>\\...\\dist\\src\\index.js`.
+On Windows, use an absolute path such as `C:\\Users\\<username>\\...\\dist\\index.js`.
 
 ### Cursor
 
@@ -353,7 +353,31 @@ In **Settings → Features → MCP Servers → Add New MCP Server**:
 
 - **Name:** `intelligent-db-dba`
 - **Type:** `command`
-- **Command:** `node <absolute-path-to-repo>/dist/src/index.js`
+- **Command:** `node <absolute-path-to-repo>/dist/index.js`
+
+### Database Configuration (`SQLITE_DB_PATH`)
+
+By default the server opens an in-memory `:memory:` SQLite database, which is ideal for the bundled demo tools. To inspect a real SQLite database file, pass the `SQLITE_DB_PATH` environment variable. When set, the server resolves the path and opens the file on disk with `better-sqlite3`; when omitted, it falls back to `:memory:`.
+
+```json
+{
+  "mcpServers": {
+    "intelligent-db-dba": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/intelligent-db-dba-mcp-server/dist/index.js"
+      ],
+      "env": {
+        "SQLITE_DB_PATH": "/path/to/database.db"
+      }
+    }
+  }
+}
+```
+
+On Windows, escape backslashes in the path (for example `"SQLITE_DB_PATH": "C:\\data\\app.db"`). The target file does not need to exist beforehand; `better-sqlite3` creates it if it is missing.
+
+> **Warning:** `seed_demo_database` drops and recreates the `users`, `orders`, and `transactions` tables. Do not run it against a production database file.
 
 ---
 
@@ -364,7 +388,7 @@ In **Settings → Features → MCP Servers → Add New MCP Server**:
 ├── src/
 │   ├── index.ts                  # MCP server, tool registration, request routing
 │   ├── db/
-│   │   ├── databaseEngine.ts     # sql.js engine, plan analysis, schema inspection
+│   │   ├── databaseEngine.ts     # better-sqlite3 engine, plan analysis, schema inspection
 │   │   └── migrationGuardrail.ts # SAVEPOINT dry-runs and DDL risk assessment
 │   ├── tools/
 │   │   └── dbaTools.ts           # Zod schemas and tool handlers

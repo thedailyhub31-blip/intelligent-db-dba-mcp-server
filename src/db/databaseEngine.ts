@@ -1,5 +1,8 @@
-import initSqlJs, { Database, QueryExecResult } from 'sql.js';
+import Database from 'better-sqlite3';
+import path from 'node:path';
 import { logger } from '../utils/logger.js';
+
+export type DbConnection = Database.Database;
 
 export interface QueryPlanRow {
   id: number;
@@ -54,16 +57,24 @@ export interface IndexInfo {
   columns: string[];
 }
 
-let _db: Database | null = null;
+let _db: DbConnection | null = null;
 let _initialized = false;
 
-export async function getDatabase(): Promise<Database> {
+export async function getDatabase(): Promise<DbConnection> {
   if (!_db) {
-    const SQL = await initSqlJs();
-    _db = new SQL.Database();
+    const configuredPath = process.env.SQLITE_DB_PATH?.trim();
+
+    if (configuredPath) {
+      const resolvedPath = path.resolve(configuredPath);
+      _db = new Database(resolvedPath);
+      logger.info(`SQLite database opened from disk: ${resolvedPath}`);
+    } else {
+      _db = new Database(':memory:');
+      logger.info('In-memory SQLite (better-sqlite3) database initialized');
+    }
+
     // Enable foreign keys via PRAGMA
-    _db.run('PRAGMA foreign_keys = ON');
-    logger.info('In-memory SQLite (sql.js) database initialized');
+    _db.pragma('foreign_keys = ON');
     _initialized = true;
   }
   return _db;
@@ -77,29 +88,35 @@ export function closeDatabase(): void {
   }
 }
 
-// Helper: convert sql.js QueryExecResult rows into array of plain objects
-function rowsToObjects(result: QueryExecResult): Record<string, unknown>[] {
-  if (!result) return [];
-  const { columns, values } = result;
-  return values.map(row => {
-    const obj: Record<string, unknown> = {};
-    columns.forEach((col, i) => { obj[col] = row[i]; });
-    return obj;
-  });
+export function isUsingDiskDatabase(): boolean {
+  return Boolean(process.env.SQLITE_DB_PATH?.trim()) && _initialized;
 }
 
-export function queryAll(db: Database, sql: string, params: unknown[] = []): Record<string, unknown>[] {
-  const results = db.exec(sql, params as (string | number | null | Uint8Array)[]);
-  if (!results || results.length === 0) return [];
-  return rowsToObjects(results[0]);
+export function queryAll(db: DbConnection, sql: string, params: unknown[] = []): Record<string, unknown>[] {
+  const statement = db.prepare(sql);
+  const rows = params.length > 0
+    ? statement.all(...(params as never[]))
+    : statement.all();
+  return rows as Record<string, unknown>[];
 }
 
-export function queryFirst(db: Database, sql: string, params: unknown[] = []): Record<string, unknown> | undefined {
-  const rows = queryAll(db, sql, params);
-  return rows[0];
+export function queryFirst(db: DbConnection, sql: string, params: unknown[] = []): Record<string, unknown> | undefined {
+  const statement = db.prepare(sql);
+  const row = params.length > 0
+    ? statement.get(...(params as never[]))
+    : statement.get();
+  return row as Record<string, unknown> | undefined;
 }
 
-export function analyzeQueryPlan(db: Database, sqlQuery: string): QueryPlanAnalysis {
+export function runStatement(db: DbConnection, sql: string, params: unknown[] = []): void {
+  if (params.length === 0) {
+    db.exec(sql);
+    return;
+  }
+  db.prepare(sql).run(...(params as never[]));
+}
+
+export function analyzeQueryPlan(db: DbConnection, sqlQuery: string): QueryPlanAnalysis {
   logger.info('Analyzing query plan', { query: sqlQuery.substring(0, 100) });
 
   let rawPlan: QueryPlanRow[] = [];
@@ -129,7 +146,7 @@ export function analyzeQueryPlan(db: Database, sqlQuery: string): QueryPlanAnaly
       const tableMatch = row.detail.match(/SCAN\s+(\w+)/i);
       if (tableMatch) {
         fullTableScanTables.push(tableMatch[1]);
-        warnings.push(`⚠️ FULL TABLE SCAN detected on table "${tableMatch[1]}" — no suitable index found`);
+        warnings.push(`�s��,? FULL TABLE SCAN detected on table "${tableMatch[1]}" �?" no suitable index found`);
         recommendations.push(`Consider adding an index on the WHERE/JOIN column(s) of table "${tableMatch[1]}"`);
       }
     }
@@ -144,13 +161,13 @@ export function analyzeQueryPlan(db: Database, sqlQuery: string): QueryPlanAnaly
 
     // Detect correlated subqueries or nested loops
     if (detail.includes('CORRELATED') || detail.includes('SUBQUERY')) {
-      warnings.push('⚠️ Correlated subquery detected — may cause N+1 performance issue');
+      warnings.push('�s��,? Correlated subquery detected �?" may cause N+1 performance issue');
       recommendations.push('Consider rewriting correlated subquery as a JOIN or CTE');
     }
 
     // Detect temp B-tree (sort without index)
     if (detail.includes('B-TREE') && detail.includes('ORDER BY')) {
-      warnings.push('⚠️ Temporary B-Tree sort detected — ORDER BY without supporting index');
+      warnings.push('�s��,? Temporary B-Tree sort detected �?" ORDER BY without supporting index');
       recommendations.push('Add an index that covers the ORDER BY column(s) to avoid filesort');
     }
   }
@@ -179,7 +196,7 @@ export function analyzeQueryPlan(db: Database, sqlQuery: string): QueryPlanAnaly
   };
 }
 
-export function getTableSchema(db: Database, tableName: string): TableSchemaInfo {
+export function getTableSchema(db: DbConnection, tableName: string): TableSchemaInfo {
   logger.info('Inspecting table schema', { tableName });
 
   // Validate table exists

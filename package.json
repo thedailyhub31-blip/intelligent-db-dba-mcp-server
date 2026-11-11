@@ -3,14 +3,14 @@
   "version": "1.0.0",
   "description": "Intelligent Database DBA & Schema Migration Guardrail MCP Server",
   "type": "module",
-  "main": "dist/src/index.js",
+  "main": "dist/index.js",
   "bin": {
-    "intelligent-db-dba-mcp-server": "./dist/src/index.js"
+    "intelligent-db-dba-mcp-server": "./dist/index.js"
   },
   "scripts": {
     "build": "node ./node_modules/typescript/bin/tsc",
-    "start": "node dist/src/index.js",
-    "test": "node dist/scripts/test-client.js"
+    "start": "node dist/index.js",
+    "test": "tsx scripts/test-client.ts"
   },
   "keywords": [
     "mcp",
@@ -28,12 +28,13 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "sql.js": "^1.11.0",
+    "better-sqlite3": "^13.0.3",
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^20.11.5",
-    "@types/sql.js": "^1.4.9",
+    "tsx": "^4.23.15",
     "typescript": "^5.3.3"
   }
 }
